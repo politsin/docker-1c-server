@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker build --tag alexanderfefelov/1c-server .
+docker build -t docker-1c:1.0 .

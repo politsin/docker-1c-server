@@ -1,46 +1,44 @@
-FROM ubuntu:xenial
+FROM docker-php
 
 ENV PLATFORM_VERSION=83
 ENV SERVER_VERSION=8.3.9-2170
 
 ENV GOSU_VERSION 1.7
 
-ENV DEBIAN_FRONTEND noninteractive
-
-RUN apt-get -qq update \
-  && apt-get -qq install --yes --no-install-recommends ca-certificates wget locales \
-  && `#----- Install the dependencies -----` \
-  && apt-get -qq install --yes --no-install-recommends fontconfig imagemagick \
-  && `#----- Deal with ttf-mscorefonts-installer -----` \
-  && apt-get -qq install --yes --no-install-recommends xfonts-utils cabextract \
-  && wget --quiet --output-document /tmp/ttf-mscorefonts-installer_3.6_all.deb http://ftp.us.debian.org/debian/pool/contrib/m/msttcorefonts/ttf-mscorefonts-installer_3.6_all.deb \
-  && dpkg --install /tmp/ttf-mscorefonts-installer_3.6_all.deb \
-  && rm /tmp/ttf-mscorefonts-installer_3.6_all.deb \
-  && `#----- Install gosu -----` \
-  && wget --quiet --output-document /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$(dpkg --print-architecture)" \
-  && chmod +x /usr/local/bin/gosu \
-  && gosu nobody true
+RUN apt-get -qq update && \
+    apt-get install -y apache2 imagemagick && \
+    apt-get install -y --no-install-recommends ca-certificates \
+                                               locales \
+                                               fontconfig \
+                                               xfonts-utils \
+                                               cabextract && \
+    wget --quiet --output-document /tmp/ttf-mscorefonts-installer_3.6_all.deb http://ftp.us.debian.org/debian/pool/contrib/m/msttcorefonts/ttf-mscorefonts-installer_3.6_all.deb && \
+    dpkg --install /tmp/ttf-mscorefonts-installer_3.6_all.deb && \
+    rm /tmp/ttf-mscorefonts-installer_3.6_all.deb && \
+    wget --quiet --output-document /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$(dpkg --print-architecture)" && \
+    chmod +x /usr/local/bin/gosu && \
+    gosu nobody true
 
 RUN localedef --inputfile ru_RU --force --charmap UTF-8 --alias-file /usr/share/locale/locale.alias ru_RU.UTF-8
 ENV LANG ru_RU.utf8
 
-ADD *.deb /tmp/
+ADD deb/*.deb /tmp/
 
-RUN dpkg --install /tmp/1c-enterprise$PLATFORM_VERSION-common_${SERVER_VERSION}_amd64.deb \
- && dpkg --install /tmp/1c-enterprise$PLATFORM_VERSION-server_${SERVER_VERSION}_amd64.deb \
- && dpkg --install /tmp/1c-enterprise$PLATFORM_VERSION-ws_${SERVER_VERSION}_amd64.deb \
- && rm /tmp/*.deb \
- && mkdir --parent /var/log/1C /home/usr1cv8/.1cv8/1C/1cv8/conf \
- && chown --recursive usr1cv8:grp1cv8 /var/log/1C /home/usr1cv8
+RUN dpkg --install /tmp/1c-enterprise$PLATFORM_VERSION-common_${SERVER_VERSION}_amd64.deb && \
+    dpkg --install /tmp/1c-enterprise$PLATFORM_VERSION-server_${SERVER_VERSION}_amd64.deb && \
+    dpkg --install /tmp/1c-enterprise$PLATFORM_VERSION-ws_${SERVER_VERSION}_amd64.deb && \
+    rm /tmp/*.deb && \
+    mkdir --parent /var/log/1C /home/usr1cv8/.1cv8/1C/1cv8/conf && \
+    chown --recursive usr1cv8:grp1cv8 /var/log/1C /home/usr1cv8
 
-COPY container/docker-entrypoint.sh /
-COPY container/logcfg.xml /home/usr1cv8/.1cv8/1C/1cv8/conf
+RUN mkdir -p /home/usr1cv8/.1cv8/db && \
+	touch /etc/apache2/conf-available/db.conf && \
+	/opt/1C/v8.3/x86_64/webinst -apache24 -wsdir db -dir '/home/usr1cv8/.1cv8/db' -connstr 'Srvr="localhost";Ref="db";' -confPath /etc/apache2/conf-available/db.conf && \
+	a2enconf db
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+COPY config/logcfg.xml /home/usr1cv8/.1cv8/1C/1cv8/conf
+COPY config/supervisor/supervisord.conf /etc/supervisord.conf
 
-VOLUME /home/usr1cv8
-VOLUME /var/log/1C
+EXPOSE 22 1540-1541 1560-1591
 
-EXPOSE 1540-1541 1560-1591
-
-CMD ["ragent"]
+ENTRYPOINT ["/start.sh"]
